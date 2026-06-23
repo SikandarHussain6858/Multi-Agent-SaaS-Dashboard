@@ -93,6 +93,18 @@ def get_tasks(db: Session = Depends(get_db)):
     tasks = db.query(TaskRun).order_by(TaskRun.created_at.desc()).all()
     return tasks
 
+@router.delete("/task/{task_id}", dependencies=[Depends(get_api_key)])
+def delete_task(task_id: str, db: Session = Depends(get_db)):
+    """Delete a task from history."""
+    task_run = db.query(TaskRun).filter(TaskRun.task_id == task_id).first()
+    if not task_run:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    db.delete(task_run)
+    db.commit()
+    return {"message": "Task deleted successfully"}
+
+
 @router.websocket("/ws/status")
 async def websocket_status(websocket: WebSocket):
     """Stream real-time agent status updates."""
