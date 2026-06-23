@@ -1,6 +1,6 @@
 import os
 from dotenv import load_dotenv
-from ddgs import DDGS
+from duckduckgo_search import DDGS
 from groq import Groq
 
 # Load environment variables from the root .env file
