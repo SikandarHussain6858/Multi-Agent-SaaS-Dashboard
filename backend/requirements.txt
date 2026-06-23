@@ -6,3 +6,4 @@ websockets
 python-dotenv
 duckduckgo-search
 sqlalchemy
+alembic

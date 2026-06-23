@@ -1,5 +1,4 @@
 import os
-import sqlite3
 import uuid
 import json
 import asyncio
@@ -9,30 +8,13 @@ from agents.research_agent import ResearchAgent
 from agents.writer_agent import WriterAgent
 from agents.reviewer_agent import ReviewerAgent
 
-DB_PATH = os.path.join(os.path.dirname(__file__), '../../runs.db')
-
-def init_db():
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS task_runs (
-            task_id TEXT PRIMARY KEY,
-            task TEXT,
-            format_pref TEXT,
-            output TEXT,
-            score INTEGER,
-            feedback TEXT,
-            status TEXT,
-            created_at TEXT
-        )
-    """)
-    conn.commit()
-    conn.close()
+from core.database import SessionLocal, Base, engine
+from core.models import TaskRun
 
 class Orchestrator:
     def __init__(self):
-        # Initialize SQLite DB
-        init_db()
+        # Create tables if they don't exist
+        Base.metadata.create_all(bind=engine)
         
         # Initialize Agents
         print("[*] Initializing Agents...")
@@ -45,36 +27,45 @@ class Orchestrator:
         """Helper to emit WebSocket events safely."""
         if websocket:
             try:
-                await websocket.send_json({
-                    "agent": agent_name,
-                    "status": status,
-                    "message": message,
-                    "timestamp": datetime.now(timezone.utc).isoformat()
-                })
+                # If it's a raw WebSocket, we use send_json
+                if hasattr(websocket, "send_json"):
+                    await websocket.send_json({
+                        "agent": agent_name,
+                        "status": status,
+                        "message": message,
+                        "timestamp": datetime.now(timezone.utc).isoformat()
+                    })
             except Exception as e:
                 print(f"[!] WebSocket emission failed: {e}")
 
     def _save_run(self, task_id, task, format_pref, output, score, feedback, status):
-        """Helper to save run to SQLite."""
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        
-        # Check if exists to do an insert or update
-        cursor.execute("SELECT task_id FROM task_runs WHERE task_id = ?", (task_id,))
-        if cursor.fetchone():
-            cursor.execute("""
-                UPDATE task_runs
-                SET output = ?, score = ?, feedback = ?, status = ?
-                WHERE task_id = ?
-            """, (output, score, json.dumps(feedback) if feedback else None, status, task_id))
-        else:
-            cursor.execute("""
-                INSERT INTO task_runs (task_id, task, format_pref, output, score, feedback, status, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """, (task_id, task, format_pref, output, score, json.dumps(feedback) if feedback else None, status, datetime.now(timezone.utc).isoformat()))
-        
-        conn.commit()
-        conn.close()
+        """Helper to save run to DB using SQLAlchemy."""
+        db = SessionLocal()
+        try:
+            db_run = db.query(TaskRun).filter(TaskRun.task_id == task_id).first()
+            feedback_str = json.dumps(feedback) if feedback else None
+            
+            if db_run:
+                db_run.output = output
+                db_run.score = score
+                db_run.feedback = feedback_str
+                db_run.status = status
+            else:
+                db_run = TaskRun(
+                    task_id=task_id,
+                    task=task,
+                    format_pref=format_pref,
+                    output=output,
+                    score=score,
+                    feedback=feedback_str,
+                    status=status
+                )
+                db.add(db_run)
+            db.commit()
+        except Exception as e:
+            print(f"[!] DB Save Error: {e}")
+        finally:
+            db.close()
 
     async def run_pipeline(self, task: str, format_pref: str = "blog", websocket=None) -> dict:
         """
@@ -88,7 +79,6 @@ class Orchestrator:
         try:
             # 1. Research Agent
             await self._emit_status(websocket, "Research Agent", "started", "Gathering information...")
-            # Running synchronous agent methods in a threadpool to avoid blocking event loop
             research_summary = await asyncio.to_thread(self.research_agent.run, task)
             
             if "[!] Error" in research_summary:
