@@ -7,3 +7,4 @@ python-dotenv
 duckduckgo-search
 sqlalchemy
 alembic
+psycopg2-binary

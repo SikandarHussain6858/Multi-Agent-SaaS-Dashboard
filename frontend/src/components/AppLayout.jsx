@@ -1,6 +1,6 @@
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { LayoutDashboard, History, Sparkles, Settings } from "lucide-react";
-import { cn } from "../lib/utils";
+import { cn } from "../lib/utils.js";
 
 export default function Layout() {
   const location = useLocation();
