@@ -13,7 +13,7 @@ app = FastAPI(title="Multi-Agent SaaS API")
 # Setup CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:5173"],  # React frontend origins
+    allow_origins=["*"],  # Allows all origins for simplicity in deployment
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
