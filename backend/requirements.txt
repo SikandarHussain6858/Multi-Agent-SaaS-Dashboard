@@ -1,4 +1,8 @@
+openai
+groq
 fastapi
 uvicorn
-pydantic
+websockets
 python-dotenv
+duckduckgo-search
+sqlalchemy
